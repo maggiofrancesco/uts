@@ -3,7 +3,7 @@
 from ConfigParser import SafeConfigParser
 import os
 
-from DBConnection import DBConnection
+from db_connection import DBConnection
 from entities.bus import Bus
 from entities.request import Request
 
@@ -27,7 +27,7 @@ def get_buses():
     for row in cursor:
         buses.append(
             Bus(
-                id=row[0],
+                id_bus=row[0],
                 license_plate=row[1],
                 seats=row[2],
                 place=row[3],
@@ -49,7 +49,7 @@ def get_requests():
     for row in cursor:
         requests.append(
             Request(
-                id=row[0],
+                id_request=row[0],
                 departure=row[1],
                 lat_dep=row[2],
                 lon_dep=row[3],
