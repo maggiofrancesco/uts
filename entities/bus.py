@@ -3,7 +3,7 @@
 
 class Bus(object):
 
-    def __init__(self, id_bus, license_plate, seats, lat, lon, place="Address not available"):
+    def __init__(self, id_bus, license_plate, seats, lat, lon, place=''):
         self.id_bus = id_bus
         self.license_plate = license_plate
         self.seats = seats
