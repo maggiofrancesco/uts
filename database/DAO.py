@@ -36,6 +36,7 @@ def get_buses():
             )
         )
 
+    connection.close()
     return buses
 
 
@@ -58,7 +59,7 @@ def get_requests():
                 lon_arr=row[6],
                 time_dep=row[7],
                 time_arr=row[8],
-                range_arrival=row[9]
+                user=row[9]
             )
         )
 
