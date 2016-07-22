@@ -63,7 +63,46 @@ def get_requests():
             )
         )
 
+    connection.close()
     return requests
+
+
+def insert_movement(id_fitness, id_mezzo, lat, lon, luogo=''):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    cursor.execute("INSERT INTO public.\"Spostamenti\"(id_fitness, id_mezzo, luogo, lat, lon) "
+                   "VALUES ('{0}', {1}, '{2}', {3}, {4})".format(id_fitness, id_mezzo, luogo, lat, lon))
+
+    connection.commit()
+    connection.close()
+
+
+def get_movements(id_fitness, id_mezzo):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT * FROM public.\"Spostamenti\" WHERE id_fitness='{0}' and id_mezzo='{1}'"
+                   "ORDER BY id".format(id_fitness, id_mezzo))
+
+    spostamenti = cursor.fetchall()
+    result = []
+    for spostamento in spostamenti:
+        result.append({
+            "id_movement": spostamento[0],
+            "id_fitness": spostamento[1],
+            "id_bus": spostamento[2],
+            "place": spostamento[3],
+            "lat": spostamento[4],
+            "lon": spostamento[5]
+        })
+
+    connection.commit()
+    connection.close()
+
+    return result
 
 
 if __name__ == "__main__":
@@ -74,3 +113,7 @@ if __name__ == "__main__":
         print(str(bus))
     for request in requests:
         print(str(request))
+
+    insert_movement("asdasdasd", 10, 41.109024, 16.679656)
+
+    print get_movements("3f8ef40f-9a00-40f4-9217-f4a96f0b7b60", 12)
