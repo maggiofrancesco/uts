@@ -9,7 +9,7 @@ from entities.request import Request
 
 
 config = SafeConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), 'config.cfg'))
+config.read(os.path.join(os.path.dirname(__file__), 'config_db.cfg'))
 host = config.get("database", "host")
 port = config.get("database", "port")
 user = config.get("database", "user")
@@ -99,9 +99,49 @@ def get_movements(id_fitness, id_mezzo):
             "lon": spostamento[5]
         })
 
+    connection.close()
+    return result
+
+
+def insert_route(lat_ori, lon_ori, lat_dest, lon_dest, distanza, durata, origine='', destinazione=''):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    cursor.execute("INSERT INTO public.\"Itinerari\"(origine, lat_origine, lon_origine, destinazione,"
+                   " lat_destinazione, lon_destinazione, distanza, durata) VALUES ('{0}',{1},{2},'{3}',{4},{5},{6},{7})"
+                   "".format(origine, lat_ori, lon_ori, destinazione, lat_dest, lon_dest, distanza, durata))
+
     connection.commit()
     connection.close()
 
+
+def get_route(lat_origine, lon_origine, lat_destinazione, lon_destinazione):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT * FROM public.\"Itinerari\" WHERE lat_origine={0} and lon_origine={1} "
+                   "and lat_destinazione={2} and lon_destinazione={3}".format(lat_origine, lon_origine,
+                                                                                lat_destinazione, lon_destinazione))
+
+    route = cursor.fetchone()
+    if route != None:
+        result = {
+            "id_route": route[0],
+            "departure": route[1],
+            "lat_dep": route[2],
+            "lon_dep": route[3],
+            "arrival": route[4],
+            "lat_arr": route[5],
+            "lon_arr": route[6],
+            "distance": route[7],
+            "duration": route[8]
+        }
+    else:
+        result = None
+
+    connection.close()
     return result
 
 
@@ -117,3 +157,5 @@ if __name__ == "__main__":
     insert_movement("asdasdasd", 10, 41.109024, 16.679656)
 
     print get_movements("3f8ef40f-9a00-40f4-9217-f4a96f0b7b60", 12)
+    insert_route("Piazza Marconi", 123.2, 1111.2, "Piazza Aldo", 1231.2, 1234.4, 1231, 123)
+    print get_route(123.2,1111.2,1231.2,1234.4)
