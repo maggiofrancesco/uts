@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import maps
+import maps as gmaps
 import uuid
 import numpy as np
 from random import randint
@@ -65,6 +65,7 @@ class Matrix(object):
     Per ciascuna navetta, le richieste vengono riordinate sulla base della vicinanza.
     """
     def priority(self):
+        maps = gmaps.Maps()
         for j in range(self.n_buses):
 
             bus_position_lat = self.buses[j].lat
@@ -108,6 +109,7 @@ class Matrix(object):
     soddisfare le richieste ricevute.
     """
     def fitness(self):
+        maps = gmaps.Maps()
         self.fitness_data["id"] = str(uuid.uuid4())
         distance = 0
         duration = 0
@@ -138,14 +140,14 @@ class Matrix(object):
                     print req_departure, req_arrival
                     directions_from_bus = maps.get_directions(bus_origin, req_departure)
                     directions_from_request = maps.get_directions(req_departure, req_arrival)
-                    distance += directions_from_bus["distance"]["value"]
-                    distance += directions_from_request["distance"]["value"]
-                    duration += directions_from_bus["duration"]["value"]
-                    duration += directions_from_request["duration"]["value"]
+                    distance += directions_from_bus["distance"]
+                    distance += directions_from_request["distance"]
+                    duration += directions_from_bus["duration"]
+                    duration += directions_from_request["duration"]
 
                     print "Directions_from_bus: "+str(directions_from_bus)
                     print "Directions_from_request "+str(directions_from_request)
-                    print "Distance: "+str(distance)+" Duration: "+str(duration)
+                    print "Total Distance: "+str(distance/1000)+"km"+" Total Duration: "+str(duration/60)+"m"
 
                     self.buses[j].place = self.requests[i].arrival
                     self.buses[j].lat = self.requests[i].lat_arr
@@ -208,26 +210,23 @@ class Matrix(object):
     Stampa la matrice.
     """
     def print_matrix(self):
+        maps = gmaps.Maps()
         data = {}
         for j in range(self.n_buses):
             bus = self.buses[j]
-            print bus
             bus_requests = []
             movements = dao.get_movements(self.fitness_data["id"], bus.id_bus)
-            print movements
             movements_index = 0
             for i in range(self.n_requests):
                 request_data = {}
                 if self.matrix[i][j] == 1:
                     request = self.requests[i]
-                    print request
                     req_departure_lat = request.lat_dep
                     req_departure_lon = request.lon_dep
                     req_departure = "{0},{1}".format(req_departure_lat, req_departure_lon)
                     req_arrival_lat = request.lat_arr
                     req_arrival_lon = request.lon_arr
                     req_arrival = "{0},{1}".format(req_arrival_lat, req_arrival_lon)
-                    print movements_index
                     movement = movements[movements_index]
                     movement_lat = movement["lat"]
                     movement_lon = movement["lon"]
@@ -235,8 +234,8 @@ class Matrix(object):
 
                     directions_from_bus = maps.get_directions(bus_origin, req_departure)
                     directions_from_request = maps.get_directions(req_departure, req_arrival)
-                    distance = directions_from_bus["distance"]["value"] + directions_from_request["distance"]["value"]
-                    duration = directions_from_bus["duration"]["value"] + directions_from_request["duration"]["value"]
+                    distance = directions_from_bus["distance"] + directions_from_request["distance"]
+                    duration = directions_from_bus["duration"] + directions_from_request["duration"]
 
                     request_data["id_bus"] = bus.id_bus
                     request_data["license_plate"] = bus.license_plate
@@ -262,17 +261,17 @@ if __name__ == "__main__":
     matrice = Matrix(buses, requests)
     matrice.initializing()
     print '\nDopo popolamento...\n'
-    #matrice.print_row_matrix()
+    matrice.print_row_matrix()
     print '\nDopo compatibility e prima di priority: \n'
     matrice.compatibility()
-    #matrice.print_row_matrix()
+    matrice.print_row_matrix()
     print '\nDopo priority e prima di fitness (stampa matrice): \n'
     matrice.priority()
-    #matrice.print_row_matrix()
+    matrice.print_row_matrix()
     print '\nDopo fitness, e prima di mutazione (stampa matrice): \n'
     matrice.fitness()
     print matrice.fitness_data
-    #print '\nDopo mutation: \n'
-    #matrice.mutation()
-    #matrice.print_row_matrix()
     print matrice.print_matrix()
+    print '\nDopo mutation: \n'
+    matrice.mutation()
+    matrice.print_row_matrix()
