@@ -1,37 +1,58 @@
 # -*- coding: utf-8 -*-
 
+import os
 import googlemaps
-
-gmaps = googlemaps.Client(key='AIzaSyDPIwBmGSv8LYLur-YTGB0KiKQQojUjNsw')
-
-
-def get_directions(origin, destination, mode="driving"):
-    directions_result = gmaps.directions(origin, destination, mode)
-    distance = directions_result[0]["legs"][0]["distance"]
-    duration = directions_result[0]["legs"][0]["duration"]
-    return {"distance": distance, "duration": duration}
+from ConfigParser import SafeConfigParser
+from database import dao
 
 
-def closer_request(start, requests, requests_indexes):
-    closer_req = requests[requests_indexes[0]]
-    stop = "{0},{1}".format(closer_req.lat_dep, closer_req.lon_dep)
-    closer_distance = get_directions(start, stop)["distance"]["value"]
-    request_index = requests_indexes[0]
+config = SafeConfigParser()
+config.read(os.path.join(os.path.dirname(__file__), 'config_maps.cfg'))
+google_directions_api_key = config.get("google_api_key", "directions")
 
-    for index in range(len(requests)):
-        if index == 0:
-            continue
-        request = requests[requests_indexes[index]]
-        stop = "{0},{1}".format(request.lat_dep, request.lon_dep)
-        distance = get_directions(start, stop)["distance"]["value"]
-        if distance < closer_distance:
-            closer_req = request
-            closer_distance = distance
-            request_index = requests_indexes[index]
+class Maps(object):
 
-    return request_index, closer_req
+    def __init__(self):
+        self.gmaps = googlemaps.Client(key=google_directions_api_key)
+        self.routes = {}
 
 
-if __name__ == "__main__":
-    print get_directions("Viale due cappelle 25, bitonto", "Via benedetto tripes 23, giovinazzo")
-    print get_directions("Viale due cappelle 25, bitonto", "Via sparano, Bari")
+    def get_directions(self, origin, destination, mode="driving"):
+        if (origin, destination) in self.routes:
+            return self.routes[(origin, destination)]
+        else:
+            lat_departure, lon_departure = origin.split(",")
+            lat_arrival, lon_arrival = destination.split(",")
+            route = dao.get_route(lat_departure, lon_departure, lat_arrival, lon_arrival)
+            if route != None:
+                data = {"distance": route["distance"], "duration": route["duration"]}
+                self.routes[(origin, destination)] = data
+                return data
+            else:
+                directions_result = self.gmaps.directions(origin, destination, mode)
+                distance = directions_result[0]["legs"][0]["distance"]["value"]
+                duration = directions_result[0]["legs"][0]["duration"]["value"]
+                data = {"distance": distance, "duration": duration}
+                self.routes[(origin, destination)] = data
+                dao.insert_route(lat_departure, lon_departure, lat_arrival, lon_arrival, distance, duration)
+                return data
+
+
+    def closer_request(self, start, requests, requests_indexes):
+        closer_req = requests[requests_indexes[0]]
+        stop = "{0},{1}".format(closer_req.lat_dep, closer_req.lon_dep)
+        closer_distance = self.get_directions(start, stop)["distance"]
+        request_index = requests_indexes[0]
+
+        for index in range(len(requests)):
+            if index == 0:
+                continue
+            request = requests[requests_indexes[index]]
+            stop = "{0},{1}".format(request.lat_dep, request.lon_dep)
+            distance = self.get_directions(start, stop)["distance"]
+            if distance < closer_distance:
+                closer_req = request
+                closer_distance = distance
+                request_index = requests_indexes[index]
+
+        return request_index, closer_req
