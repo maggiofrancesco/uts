@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import copy
 import googlemaps
 from ConfigParser import SafeConfigParser
 from database import dao
@@ -10,13 +11,23 @@ config = SafeConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), 'config_maps.cfg'))
 google_directions_api_key = config.get("google_api_key", "directions")
 
+
 class Maps(object):
 
     def __init__(self):
         self.gmaps = googlemaps.Client(key=google_directions_api_key)
-        self.routes = {}
+        self.routes = {}    # Struttura per la tenuta dei risultati delle ricerche effettuate in esecuzione
 
-
+    """
+    Metodo per la gestione delle chiamate verso Google Maps.
+    Il seguente metodo consente la gestione delle chiamate in modo da ridurre il traffico al minimo possibile e
+    cercare di ottimizzare le tempistiche per l'ottenimento delle informazioni di distanza e durata di un viaggio.
+    Se la ricerca in questione è stata effettuata durante l'esecuzione, questa sarà presente all'interno della
+    struttura self.routes. Se, invece, la medesima richiesta è stata effettuata in esecuzioni passate, allora si
+    dovrà effettuara la chiamata al database. Infine, se la richiesta non è mai stata effettuata in precedenza, si
+    dovranno necessariamente interpellare i server di Google Maps. In quest'ultimo caso, si provvede subito ad
+    inserire la nuova ricerca sia nella struttura self.routes che nel database, ottimizzando le richieste future.
+    """
     def get_directions(self, origin, destination, mode="driving"):
         if (origin, destination) in self.routes:
             return self.routes[(origin, destination)]
@@ -24,7 +35,7 @@ class Maps(object):
             lat_departure, lon_departure = origin.split(",")
             lat_arrival, lon_arrival = destination.split(",")
             route = dao.get_route(lat_departure, lon_departure, lat_arrival, lon_arrival)
-            if route != None:
+            if route is not None:
                 data = {"distance": route["distance"], "duration": route["duration"]}
                 self.routes[(origin, destination)] = data
                 return data
@@ -37,22 +48,110 @@ class Maps(object):
                 dao.insert_route(lat_departure, lon_departure, lat_arrival, lon_arrival, distance, duration)
                 return data
 
-
-    def closer_request(self, start, requests, requests_indexes):
-        closer_req = requests[requests_indexes[0]]
+    """
+    Metodo per l'individuazione della richiesta più vicina al mezzo, che sia salita o discesa di un passeggero.
+    Considerata una struttura contenente le richieste da ordinare e una struttura contenente le richieste "prese",
+    (cioè passeggeri che sono saliti a bordo della navetta), il metodo si occupa dell'individuazione della action
+    più vicina, che sia get_on oppure get_off, avendo a disposizione le action di get_on effettuate fino a quel
+    momento. Quindi, prima individua la richiesta di get_on più vicina e, successivamente, verifica la presenza o
+    meno di una richiesta di get_off più vicina rispetto a quella di get_on, servendosi di requests_loaded.
+    """
+    def closer_action_finder(self, start, requests, requests_loaded):
+        closer_request_data = requests[0]
+        closer_req = requests[0]["request"]
         stop = "{0},{1}".format(closer_req.lat_dep, closer_req.lon_dep)
         closer_distance = self.get_directions(start, stop)["distance"]
-        request_index = requests_indexes[0]
+        operation = "get_on"
 
         for index in range(len(requests)):
             if index == 0:
                 continue
-            request = requests[requests_indexes[index]]
-            stop = "{0},{1}".format(request.lat_dep, request.lon_dep)
+            request_data = requests[index]
+            stop = "{0},{1}".format(request_data["request"].lat_dep, request_data["request"].lon_dep)
             distance = self.get_directions(start, stop)["distance"]
             if distance < closer_distance:
-                closer_req = request
+                closer_request_data = request_data
                 closer_distance = distance
-                request_index = requests_indexes[index]
 
-        return request_index, closer_req
+        for index in range(len(requests_loaded)):
+            request_data = requests_loaded[index]
+            stop = "{0},{1}".format(request_data["request"].lat_arr, request_data["request"].lon_arr)
+            distance = self.get_directions(start, stop)["distance"]
+            if distance < closer_distance:
+                closer_request_data = request_data
+                closer_distance = distance
+                operation = "get_off"
+
+        return {"request_data": closer_request_data, "action": operation}
+
+    """
+    Metodo per l'individuazione della richiesta di discesa (action get_off) più vicina.
+    Tale metodo individua la richiesta più vicina restituendo un dizionario contente l'oggetto Richiesta e la action.
+    """
+    def closer_get_off(self, start, requests_loaded):
+        closer_request_data = requests_loaded[0]
+        stop = "{0},{1}".format(closer_request_data["request"].lat_arr, closer_request_data["request"].lon_arr)
+        closer_distance = self.get_directions(start, stop)["distance"]
+
+        for index in range(len(requests_loaded)):
+            if index == 0:
+                continue
+            request_data = requests_loaded[index]
+            stop = "{0},{1}".format(request_data["request"].lat_arr, request_data["request"].lon_arr)
+            distance = self.get_directions(start, stop)["distance"]
+            if distance < closer_distance:
+                closer_request_data = request_data
+                closer_distance = distance
+
+        return {"request_data": closer_request_data, "action": "get_off"}
+
+    """
+    Metodo per l'ordinamento di un chunk di richieste assegnate ad una navetta specifica.
+    Il metodo riordana le richieste presenti nel chunk, memorizzando di volta in volta le action che la navetta
+    dovrà eseguire (get_on/get_off) all'interno della struttura che gli viene passata (actions). L'ordinamento
+    procede in maniera incrementale, iterando su di una copia della struttura requests, requests_copy (shallow copy).
+    La action più vicina viene individuata chiamando il metodo self.closer_action_finder e si gestisce la casistica,
+    a seconda che sia salita o discesa di un passeggero. Alla fine, vengono gestite le richieste di discesa che
+    eventualmente possono essere rimaste.
+    Importante sottolineare che la struttura requests ricevuta dal metodo contiene una lista di dizionari contententi
+    l'indice della richiesta all'interno della matrice e l'oggetto Richiesta.
+    """
+    def order_by_distance(self, start, requests, actions):
+
+        requests_loaded = []
+        requests_copy = copy.copy(requests)
+
+        index = 0
+        while len(requests_copy) >= 1:
+            # la prossima azione da compiere: salita o discesa di un passeggero ?
+            data = self.closer_action_finder(start, requests[index:], requests_loaded)
+            actions.append(data)
+
+            # action contiene la richiesta con l'info su salita o discesa
+            if data["action"] == "get_on":
+                closer_index = requests.index(data["request_data"])
+                request_to_move = requests[index]
+                requests[index] = data["request_data"]
+                requests[closer_index] = request_to_move
+
+                requests_loaded.append(data["request_data"])
+                start = "{0},{1}".format(data["request_data"]["request"].lat_dep,
+                                         data["request_data"]["request"].lon_dep)
+                requests_copy.remove(data["request_data"])
+                index += 1  # si deve passare alla prossima persona da far salire a bordo
+
+            else:   # data["action"] == "get_off"
+                requests_loaded.remove(data["request_data"])
+                start = "{0},{1}".format(data["request_data"]["request"].lat_arr,
+                                         data["request_data"]["request"].lon_arr)
+
+        # Bisogna far scendere i passeggeri a bordo rimasti
+        if len(requests_loaded) >= 1:
+            while len(requests_loaded) >= 1:
+                data = self.closer_get_off(start, requests_loaded)
+                actions.append(data)
+                requests_loaded.remove(data["request_data"])
+                start = "{0},{1}".format(data["request_data"]["request"].lat_arr,
+                                         data["request_data"]["request"].lon_arr)
+
+        return requests
