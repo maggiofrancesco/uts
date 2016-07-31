@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from ConfigParser import SafeConfigParser
 import os
-
-from db_connection import DBConnection
 from entities.bus import Bus
 from entities.request import Request
+from db_connection import DBConnection
+from ConfigParser import SafeConfigParser
 
 
 config = SafeConfigParser()
@@ -157,5 +156,5 @@ if __name__ == "__main__":
     insert_movement("asdasdasd", 10, 41.109024, 16.679656)
 
     print get_movements("3f8ef40f-9a00-40f4-9217-f4a96f0b7b60", 12)
-    insert_route("Piazza Marconi", 123.2, 1111.2, "Piazza Aldo", 1231.2, 1234.4, 1231, 123)
+    insert_route(123.2, 1111.2, 1231.2, 1234.4, 1231, 123, origine="Piazza Marconi", destinazione="Piazza Aldo Moro")
     print get_route(123.2,1111.2,1231.2,1234.4)
