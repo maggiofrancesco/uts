@@ -20,5 +20,5 @@ class Request(object):
         return "ID Richiesta: {0} - Lat. Partenza: {1} - Lon. Partenza: {2} - Lat. Arrivo: {3} - Lon. Arrivo: {4}" \
                " - Indirizzo partenza: {5} - Indirizzo arrivo: {6} - Time partenza: {7} - Time arrivo: {8} - Range arrivo: {9}".format(
             self.id_request, self.lat_dep, self.lon_dep, self.lat_arr, self.lon_arr,
-            self.departure, self.arrival, self.time_dep, self.time_arr, self.user
+            self.departure, self.arrival, str(self.time_dep), str(self.time_arr), self.user
         )
