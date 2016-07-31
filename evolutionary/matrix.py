@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import maps as gmaps
 import uuid
 import numpy as np
-from random import randint
+import maps as gmaps
 from database import dao
+from random import randint
+from datetime import timedelta
 
 
 class Matrix(object):
@@ -15,8 +16,9 @@ class Matrix(object):
         self.n_requests = len(requests)
         self.n_buses = len(buses)
         self.matrix = np.zeros((self.n_requests, self.n_buses), dtype=np.int16)
-        self.status = {i:{"seats":buses[i].seats, "requests": 0} for i in range(self.n_buses)}
+        self.status = {i: {"seats": buses[i].seats, "requests": 0} for i in range(self.n_buses)}
         self.fitness_data = {"id": None, "distance": None, "duration": None}
+        self.actions = {}   # Struttura destinata a contenere le action da compiere da ciascun bus (salita o discesa)
 
     """
     Metodo inizializzatore.
@@ -62,7 +64,14 @@ class Matrix(object):
 
     """
     Metodo controllo priorità.
-    Per ciascuna navetta, le richieste vengono riordinate sulla base della vicinanza.
+    Per ciascuna navetta, le richieste vengono riordinate tenendo conto del vincolo di tempo stabilito dagli utenti.
+    Per fare in modo che le richieste vengano riordinate tenenendo conto anche delle distanze, il gruppo di richieste
+    associato a ciascuna navetta viene suddiviso in chunk orari. In questo modo, in ciascun chunk sono presenti le
+    richieste da soddisfare nell'arco di un'ora e si ottimizza a seconda delle distanze. A seconda di come vengono
+    ordinate, successivamente si effettuano i relativi scambi in matrice, con un'accurata gestione degli indici.
+    E' importante sottolineare che l'ottimizzazione viene effettuata considerando l'action più vicina da effettuare
+    (salita o discesa di un passeggero). Le action da compiere da ciascuna navetta vengono man mano collezionate
+    all'interno di un apposita struttura (self.actions), utilizzata in seguito per fitness e print_matrix.
     """
     def priority(self):
         maps = gmaps.Maps()
@@ -70,43 +79,100 @@ class Matrix(object):
 
             bus_position_lat = self.buses[j].lat
             bus_position_lon = self.buses[j].lon
+            self.actions[self.buses[j].id_bus] = []
+            bus_actions = self.actions[self.buses[j].id_bus]
+
             start = "{0},{1}".format(bus_position_lat, bus_position_lon)
 
             count = 0
-            requests = {}
+            requests = []
             requests_indexes = []
             for i in range(self.n_requests):
                 if self.matrix[i][j] == 1:
                     count += 1
-                    requests[i] = self.requests[i]
+                    requests.append({"index": i, "request": self.requests[i]})
                     requests_indexes.append(i)
 
-            while len(requests) > 1:
+            # Richieste ordinate per datetime
+            requests_ordered = sorted(requests, key=lambda x: x["request"].time_arr)
 
-                closer_request_index, closer_request = maps.closer_request(start, requests, requests_indexes)
-                request_to_move = self.requests[requests_indexes[0]]
+            while len(requests_ordered) >= 1:
 
-                if closer_request != request_to_move:
-                    self.requests[requests_indexes[0]] = closer_request
-                    self.requests[closer_request_index] = request_to_move
-                    requests.pop(requests_indexes[0])
-                    requests[closer_request_index] = request_to_move
+                # Considero tutte le richieste vicine temporalmente, nell'arco di un'ora
+                request_datetime = requests_ordered[0]["request"].time_arr
+                time_threshold = request_datetime + timedelta(hours=1)
+                requests_chunk = [data for data in requests_ordered if data["request"].time_arr <= time_threshold]
 
-                else:
-                    requests.pop(requests_indexes[0])
+                # Le richieste nell'arco orario vengono gestite per vicinanza
+                requests_chunk_ordered = maps.order_by_distance(start, requests_chunk, bus_actions)
+                len_request_chunk = len(requests_chunk)
 
-                requests_indexes.remove(requests_indexes[0])
+                # Spostamenti sfruttando le richieste ordinate ottenute precedentemente
+                # Si deve inoltre gestire i cambiamenti negli indici
+                closer_request_index = requests_chunk_ordered[0]["index"]
+                closer_request = requests_chunk_ordered[0]["request"]
 
-                bus_position_lat = closer_request.lat_arr       #priorità su partenza o arrivo? lat_dep o lat_arr ?
-                bus_position_lon = closer_request.lon_arr       #priorità su partenza o arrivo? lat_dep o lat_arr ?
+                while len(requests_chunk_ordered) >= 1:
+                    request_to_move = self.requests[requests_indexes[0]]
+
+                    if closer_request != request_to_move:
+                        self.requests[requests_indexes[0]] = closer_request
+                        self.requests[closer_request_index] = request_to_move
+
+                        # Modificare l'indice delle richieste spostate. Andrebbe fatto anche sulla
+                        # struttura requests_chunk_ordered ma dato che quest'ultima non è altro che
+                        # una shallow copy della prima, allora non serve.
+                        done = [False, False]
+                        for value_in_list in requests:
+                            if done == [True, True]:
+                                break
+                            if request_to_move in value_in_list.values():
+                                value_in_list["index"] = closer_request_index
+                                done[0] = True
+                                continue
+                            if closer_request in value_in_list.values():
+                                value_in_list["index"] = requests_indexes[0]
+                                done[1] = True
+                                continue
+
+                        # Modificare l'indice delle richieste spostate. In questo caso la modifica
+                        # viene effettuata in requests_ordered, dato che i dati in essa contenuti
+                        # vengono poi riposti nella struttura actions
+                        done = [False, False]
+                        for value_in_list in requests_ordered:
+                            if done == [True, True]:
+                                break
+                            if request_to_move in value_in_list.values():
+                                value_in_list["index"] = closer_request_index
+                                done[0] = True
+                                continue
+                            if closer_request in value_in_list.values():
+                                value_in_list["index"] = requests_indexes[0]
+                                done[1] = True
+                                continue
+
+                    # Si elimina la richiesta piazzata, sia da requests che da requests_chunk_ordered
+                    requests.remove(requests_chunk_ordered[0])
+                    requests_chunk_ordered.remove(requests_chunk_ordered[0])
+                    requests_indexes.remove(requests_indexes[0])
+
+                    if len(requests_chunk_ordered) >= 1:
+                        closer_request_index = requests_chunk_ordered[0]["index"]
+                        closer_request = requests_chunk_ordered[0]["request"]
+
+                # Si elimina il chunk contenente le richieste piazzate
+                requests_ordered = requests_ordered[len_request_chunk:]
+                bus_position_lat = closer_request.lat_arr   # Priorità su partenza o arrivo? lat_dep o lat_arr ?
+                bus_position_lon = closer_request.lon_arr   # Priorità su partenza o arrivo? lat_dep o lat_arr ?
                 start = "{0},{1}".format(bus_position_lat, bus_position_lon)
-
 
     """
     Metodo creazione del valore di fitness.
-    Assegna a ciascuna matrice due valori di fitness, in tale contesto
-    relativi al tempo e alla distanza che i mezzi devono impiegare per
-    soddisfare le richieste ricevute.
+    Assegna a ciascuna matrice due valori di fitness, in tale contesto relativi al tempo e alla distanza
+    che i mezzi devono impiegare per soddisfare le richieste ricevute. La struttura fondamente utilizzata è quella
+    contenente le action che ciascun mezzo dovrà effettuare. A seconda della action (get_on/get_off), vengono
+    calcolati distanza e tempo che la navetta dovrà sopportare per eseguirla. Di volta in volta, i movimenti
+    effettuati dalla navetta vengono inseriti nel database, per poterli utilizzare in seguito con print_matrix.
     """
     def fitness(self):
         maps = gmaps.Maps()
@@ -114,50 +180,42 @@ class Matrix(object):
         distance = 0
         duration = 0
         for j in range(self.n_buses):
+            id_bus = self.buses[j].id_bus
             dao.insert_movement(self.fitness_data["id"], self.buses[j].id_bus, self.buses[j].lat,
-                                   self.buses[j].lon, self.buses[j].place)
+                                self.buses[j].lon, self.buses[j].place)
 
-            print "Bus: "+str(self.buses[j])
+            bus_position_lat = self.buses[j].lat
+            bus_position_lon = self.buses[j].lon
+            for data in self.actions[id_bus]:
 
-            for i in range(self.n_requests):
-                bus_position_lat = self.buses[j].lat
-                bus_position_lon = self.buses[j].lon
                 bus_origin = "{0},{1}".format(bus_position_lat, bus_position_lon)
-
-                print "Bus position: "+self.buses[j].place
-
-                if self.matrix[i][j] == 1:
-                    req_departure_lat = self.requests[i].lat_dep
-                    req_departure_lon = self.requests[i].lon_dep
+                request = data["request_data"]["request"]
+                if data["action"] == "get_on":
+                    req_departure_lat = request.lat_dep
+                    req_departure_lon = request.lon_dep
                     req_departure = "{0},{1}".format(req_departure_lat, req_departure_lon)
-                    req_arrival_lat = self.requests[i].lat_arr
-                    req_arrival_lon = self.requests[i].lon_arr
-                    req_arrival = "{0},{1}".format(req_arrival_lat, req_arrival_lon)
-                    print "Request: "+str(self.requests[i])
-                    print "Request departure: "+self.requests[i].departure
-                    print "Request arrival: "+self.requests[i].arrival
-                    print bus_origin, req_departure
-                    print req_departure, req_arrival
                     directions_from_bus = maps.get_directions(bus_origin, req_departure)
-                    directions_from_request = maps.get_directions(req_departure, req_arrival)
                     distance += directions_from_bus["distance"]
-                    distance += directions_from_request["distance"]
                     duration += directions_from_bus["duration"]
-                    duration += directions_from_request["duration"]
 
-                    print "Directions_from_bus: "+str(directions_from_bus)
-                    print "Directions_from_request "+str(directions_from_request)
-                    print "Total Distance: "+str(distance/1000)+"km"+" Total Duration: "+str(duration/60)+"m"
+                    bus_position_lat = req_departure_lat
+                    bus_position_lon = req_departure_lon
 
-                    self.buses[j].place = self.requests[i].arrival
-                    self.buses[j].lat = self.requests[i].lat_arr
-                    self.buses[j].lon = self.requests[i].lon_arr
-                    dao.insert_movement(self.fitness_data["id"], self.buses[j].id_bus, self.buses[j].lat,
-                                           self.buses[j].lon, self.buses[j].place)
+                else:
+                    req_arrival_lat = request.lat_arr
+                    req_arrival_lon = request.lon_arr
+                    req_arrival = "{0},{1}".format(req_arrival_lat, req_arrival_lon)
+                    directions_from_bus = maps.get_directions(bus_origin, req_arrival)
+                    distance += directions_from_bus["distance"]
+                    duration += directions_from_bus["duration"]
+
+                    bus_position_lat = req_arrival_lat
+                    bus_position_lon = req_arrival_lon
+
+                dao.insert_movement(self.fitness_data["id"], self.buses[j].id_bus, bus_position_lat, bus_position_lon)
 
         self.fitness_data["distance"] = distance
         self.fitness_data["duration"] = duration
-
 
     """
     Metodo per la mutazione di ciascuna matrice della popolazione.
@@ -171,8 +229,8 @@ class Matrix(object):
             return
 
         for i in range(iterations):
-            x_column = randint(0, self.n_buses-1)
-            y_column = randint(0, self.n_buses-1)
+            x_column = randint(0, self.n_buses - 1)
+            y_column = randint(0, self.n_buses - 1)
             if x_column == y_column:
                 continue
             else:
@@ -188,7 +246,9 @@ class Matrix(object):
             self.matrix[i][y_column] = self.matrix[i][x_column]
             self.matrix[i][x_column] = temp
 
-
+    """
+    Conta il numero di richieste assegnate ad un mezzo specifico.
+    """
     def num_bus_requests(self, bus):
         num_requests = 0
         for i in range(len(self.matrix)):
@@ -197,7 +257,9 @@ class Matrix(object):
 
         return num_requests
 
-
+    """
+    Effettua una stampa in console della matrice Richieste-Mezzi.
+    """
     def print_row_matrix(self):
         for j in range(self.n_buses):
             print self.buses[j]
@@ -205,50 +267,54 @@ class Matrix(object):
                 if self.matrix[i][j] == 1:
                     print self.requests[i]
 
-
     """
-    Stampa la matrice.
+    Restituisce una struttura dati contenente i risultati dell'ottimizzazione.
     """
     def print_matrix(self):
         maps = gmaps.Maps()
         data = {}
         for j in range(self.n_buses):
             bus = self.buses[j]
+            id_bus = bus.id_bus
             bus_requests = []
             movements = dao.get_movements(self.fitness_data["id"], bus.id_bus)
             movements_index = 0
-            for i in range(self.n_requests):
+            for action in self.actions[id_bus]:
                 request_data = {}
-                if self.matrix[i][j] == 1:
-                    request = self.requests[i]
+                request = action["request_data"]["request"]
+                movement = movements[movements_index]
+                movement_lat = movement["lat"]
+                movement_lon = movement["lon"]
+                bus_origin = "{0},{1}".format(movement_lat, movement_lon)
+
+                if action["action"] == "get_on":
                     req_departure_lat = request.lat_dep
                     req_departure_lon = request.lon_dep
                     req_departure = "{0},{1}".format(req_departure_lat, req_departure_lon)
+                    directions_from_bus = maps.get_directions(bus_origin, req_departure)
+
+                else:
                     req_arrival_lat = request.lat_arr
                     req_arrival_lon = request.lon_arr
                     req_arrival = "{0},{1}".format(req_arrival_lat, req_arrival_lon)
-                    movement = movements[movements_index]
-                    movement_lat = movement["lat"]
-                    movement_lon = movement["lon"]
-                    bus_origin = "{0},{1}".format(movement_lat, movement_lon)
+                    directions_from_bus = maps.get_directions(bus_origin, req_arrival)
 
-                    directions_from_bus = maps.get_directions(bus_origin, req_departure)
-                    directions_from_request = maps.get_directions(req_departure, req_arrival)
-                    distance = directions_from_bus["distance"] + directions_from_request["distance"]
-                    duration = directions_from_bus["duration"] + directions_from_request["duration"]
+                distance = directions_from_bus["distance"]
+                duration = directions_from_bus["duration"]
 
-                    request_data["id_bus"] = bus.id_bus
-                    request_data["license_plate"] = bus.license_plate
-                    request_data["place"] = movement["place"]
-                    request_data["departure"] = request.departure
-                    request_data["arrival"] = request.arrival
-                    request_data["distance"] = distance
-                    request_data["duration"] = duration
-                    bus_requests.append(request_data)
+                request_data["action"] = action["action"]
+                request_data["id_request"] = request.id_request
+                request_data["license_plate"] = bus.license_plate
+                request_data["place"] = movement["place"]
+                request_data["departure"] = request.departure
+                request_data["arrival"] = request.arrival
+                request_data["distance"] = distance
+                request_data["duration"] = duration
+                bus_requests.append(request_data)
 
-                    movements_index += 1
+                movements_index += 1
 
-            data[bus.license_plate] = bus_requests
+            data[bus.id_bus] = bus_requests
 
         return data
 
@@ -265,8 +331,11 @@ if __name__ == "__main__":
     print '\nDopo compatibility e prima di priority: \n'
     matrice.compatibility()
     matrice.print_row_matrix()
+    print '\nPrint row matrix (inizio)\n'
+    matrice.print_row_matrix()
     print '\nDopo priority e prima di fitness (stampa matrice): \n'
     matrice.priority()
+    print '\nPrint row matrix (fine): \n'
     matrice.print_row_matrix()
     print '\nDopo fitness, e prima di mutazione (stampa matrice): \n'
     matrice.fitness()
