@@ -2,10 +2,14 @@
 
 import sys
 import copy
-import logging
 import selection
 import matrix as mtx
 from database import dao
+from logbook import Logger, StreamHandler
+
+
+StreamHandler(sys.stdout).push_application()
+log = Logger('Generation Module - Urban Transport System')
 
 
 class Generation(object):
@@ -21,14 +25,14 @@ class Generation(object):
     Metodo per la creazione della prima generazione di matrici.
     """
     def start_first_generation(self):
-        logging.info("Generating first generation...")
+        log.notice("Generating first generation...")
 
         for index in range(len(self.prev_generation)):
             buses = copy.deepcopy(self.buses)
             requests = copy.deepcopy(self.requests)
             self.prev_generation[index] = mtx.Matrix(buses, requests)
 
-        logging.info("Doing operations on {0} matrixes...".format(self.population_amount))
+        log.notice("Doing operations on {0} matrixes...".format(self.population_amount))
 
         for matrix in self.prev_generation:
             matrix.initializing()
@@ -46,11 +50,11 @@ class Generation(object):
     delle matrici migliori della generazione precedente con le matrici peggiori della generazione successiva.
     """
     def start_next_generation(self):
-        logging.info("Generating another generation...")
+        log.notice("Generating another generation...")
 
         self.prev_generation = copy.deepcopy(self.next_generation)
 
-        logging.info("Doing operations on {0} matrixes...".format(self.population_amount))
+        log.notice("Doing operations on {0} matrixes...".format(self.population_amount))
 
         for matrix in self.next_generation:
             matrix.mutation()
@@ -67,22 +71,14 @@ class Generation(object):
         return ordered_by_distance[0].fitness_data
 
 
-if __name__ == "__main__":
-
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+def main():
 
     generation = Generation(population_amount=5)
     generation.start_first_generation()
     number_generation = 1
     print generation.best_solution()
     for i in range(7):
-        logger.info("{0}^ generation will be created.".format(number_generation + 1))
+        log.notice("{0}^ generation will be created.".format(number_generation + 1))
         generation.start_next_generation()
         number_generation += 1
         print generation.best_solution()
