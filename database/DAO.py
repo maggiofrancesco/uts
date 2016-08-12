@@ -2,6 +2,7 @@
 
 import os
 from entities.bus import Bus
+from datetime import date, timedelta
 from entities.request import Request
 from db_connection import DBConnection
 from ConfigParser import SafeConfigParser
@@ -39,13 +40,34 @@ def get_buses():
     return buses
 
 
-def get_requests():
+def get_bus_id(license_plate):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT id FROM public.\"Mezzi\" WHERE targa = '{0}'".format(license_plate))
+    row = cursor.fetchone()
+    if row != None:
+        id_bus = row[0]
+    else:
+        id_bus = None
+
+    connection.close()
+    return id_bus
+
+
+def get_requests(previous_day):
 
     connection = DBConnection(host, port, database, user, password).connect()
     cursor = connection.cursor()
     requests = []
+    if previous_day:
+        yesterday = str(date.today() - timedelta(days=1))
+        query = "SELECT * FROM public.\"Richieste\" WHERE ora_arrivo::date = '{0}'".format(yesterday)
+    else:
+        query = 'SELECT * FROM public."Richieste"'
 
-    cursor.execute('SELECT * FROM public."Richieste"')
+    cursor.execute(query)
     for row in cursor:
         requests.append(
             Request(
@@ -64,6 +86,26 @@ def get_requests():
 
     connection.close()
     return requests
+
+
+def insert_request(lat_departure, lon_departure, lat_arrival, lon_arrival, time_departure, time_arrival,
+                   request_user, departure='', arrival=''):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    cursor.execute("INSERT INTO public.\"Richieste\"(origine, lat_origine, lon_origine, destinazione, "
+                   "lat_destinazione, lon_destinazione, ora_partenza, ora_arrivo, utente) "
+                   "VALUES('{0}', {1}, {2}, '{3}', {4}, {5}, '{6}', '{7}', '{8}') RETURNING id".format(departure,
+                    lat_departure, lon_departure, arrival, lat_arrival, lon_arrival, time_departure, time_arrival,
+                                                                                                       request_user))
+
+    request_inserted_id = cursor.fetchone()[0]
+
+    connection.commit()
+    connection.close()
+
+    return request_inserted_id
 
 
 def insert_movement(id_fitness, id_mezzo, lat, lon, luogo=''):
@@ -146,7 +188,7 @@ def get_route(lat_origine, lon_origine, lat_destinazione, lon_destinazione):
 
 if __name__ == "__main__":
     buses = get_buses()
-    requests = get_requests()
+    requests = get_requests(True)
     #import pdb; pdb.set_trace()
     for bus in buses:
         print(str(bus))
@@ -158,3 +200,9 @@ if __name__ == "__main__":
     print get_movements("3f8ef40f-9a00-40f4-9217-f4a96f0b7b60", 12)
     insert_route(123.2, 1111.2, 1231.2, 1234.4, 1231, 123, origine="Piazza Marconi", destinazione="Piazza Aldo Moro")
     print get_route(123.2,1111.2,1231.2,1234.4)
+
+    from datetime import datetime
+
+    print insert_request(41.117139, 16.698031, 41.108234, 16.691402, datetime.today(), datetime.today(), 'tiziana@tiziana.it')
+
+    print get_bus_id('AS128GU')
