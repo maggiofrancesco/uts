@@ -1,22 +1,30 @@
 # -*- coding: utf-8 -*-
 
+import os
 import sys
+import json
 import copy
+import maps
 import selection
 import matrix as mtx
 from database import dao
+from datetime import date, timedelta
+from ConfigParser import SafeConfigParser
 from logbook import Logger, StreamHandler
 
 
 StreamHandler(sys.stdout).push_application()
 log = Logger('Generation Module - Urban Transport System')
+config = SafeConfigParser()
+config.read(os.path.join(os.path.dirname(__file__), 'config_evol.cfg'))
+writing_routes_folder = config.get("generation", "writing_routes_folder")
 
 
 class Generation(object):
 
-    def __init__(self, population_amount):
+    def __init__(self, population_amount, previous_day=False):
         self.buses = dao.get_buses()
-        self.requests = dao.get_requests()
+        self.requests = dao.get_requests(previous_day)
         self.population_amount = population_amount
         self.prev_generation = [None for i in range(self.population_amount)]
         self.next_generation = [None for i in range(self.population_amount)]
@@ -68,17 +76,29 @@ class Generation(object):
     """
     def best_solution(self):
         ordered_by_distance = sorted(self.next_generation, key=lambda x: x.fitness_data["distance"])
-        return ordered_by_distance[0].fitness_data
+        return ordered_by_distance[0]
 
 
 def main():
 
-    generation = Generation(population_amount=5)
+    generation = Generation(population_amount=5, previous_day=True)
     generation.start_first_generation()
     number_generation = 1
-    print generation.best_solution()
+    print generation.best_solution().fitness_data
     for i in range(7):
         log.notice("{0}^ generation will be created.".format(number_generation + 1))
         generation.start_next_generation()
         number_generation += 1
-        print generation.best_solution()
+        print generation.best_solution().fitness_data
+
+    # Writing of the best solution found on a json file
+    best_matrix = generation.best_solution()
+    data_best_matrix = best_matrix.print_matrix()
+    result = maps.estimate_departures(data_best_matrix)
+    if not os.path.exists('../{0}'.format(writing_routes_folder)):
+        os.mkdir('../{0}'.format(writing_routes_folder))
+    yesterday = str(date.today() - timedelta(days=1))
+    with open('../{0}/{1}.json'.format(writing_routes_folder, yesterday), 'w') as outfile:
+        json.dump(result, outfile)
+
+
