@@ -3,12 +3,13 @@
 import os
 import copy
 import googlemaps
-from ConfigParser import SafeConfigParser
 from database import dao
+from datetime import datetime, timedelta
+from ConfigParser import SafeConfigParser
 
 
 config = SafeConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), 'config_maps.cfg'))
+config.read(os.path.join(os.path.dirname(__file__), 'config_evol.cfg'))
 google_directions_api_key = config.get("google_api_key", "directions")
 
 
@@ -58,31 +59,31 @@ class Maps(object):
     """
     def closer_action_finder(self, start, requests, requests_loaded):
         closer_request_data = requests[0]
-        closer_req = requests[0]["request"]
+        closer_req = requests[0]['request']
         stop = "{0},{1}".format(closer_req.lat_dep, closer_req.lon_dep)
-        closer_distance = self.get_directions(start, stop)["distance"]
-        operation = "get_on"
+        closer_distance = self.get_directions(start, stop)['distance']
+        operation = 'get_on'
 
         for index in range(len(requests)):
             if index == 0:
                 continue
             request_data = requests[index]
-            stop = "{0},{1}".format(request_data["request"].lat_dep, request_data["request"].lon_dep)
-            distance = self.get_directions(start, stop)["distance"]
+            stop = "{0},{1}".format(request_data['request'].lat_dep, request_data['request'].lon_dep)
+            distance = self.get_directions(start, stop)['distance']
             if distance < closer_distance:
                 closer_request_data = request_data
                 closer_distance = distance
 
         for index in range(len(requests_loaded)):
             request_data = requests_loaded[index]
-            stop = "{0},{1}".format(request_data["request"].lat_arr, request_data["request"].lon_arr)
-            distance = self.get_directions(start, stop)["distance"]
+            stop = "{0},{1}".format(request_data['request'].lat_arr, request_data['request'].lon_arr)
+            distance = self.get_directions(start, stop)['distance']
             if distance < closer_distance:
                 closer_request_data = request_data
                 closer_distance = distance
-                operation = "get_off"
+                operation = 'get_off'
 
-        return {"request_data": closer_request_data, "action": operation}
+        return {'request_data': closer_request_data, 'action': operation}
 
     """
     Metodo per l'individuazione della richiesta di discesa (action get_off) più vicina.
@@ -90,20 +91,20 @@ class Maps(object):
     """
     def closer_get_off(self, start, requests_loaded):
         closer_request_data = requests_loaded[0]
-        stop = "{0},{1}".format(closer_request_data["request"].lat_arr, closer_request_data["request"].lon_arr)
+        stop = "{0},{1}".format(closer_request_data['request'].lat_arr, closer_request_data['request'].lon_arr)
         closer_distance = self.get_directions(start, stop)["distance"]
 
         for index in range(len(requests_loaded)):
             if index == 0:
                 continue
             request_data = requests_loaded[index]
-            stop = "{0},{1}".format(request_data["request"].lat_arr, request_data["request"].lon_arr)
+            stop = "{0},{1}".format(request_data['request'].lat_arr, request_data['request'].lon_arr)
             distance = self.get_directions(start, stop)["distance"]
             if distance < closer_distance:
                 closer_request_data = request_data
                 closer_distance = distance
 
-        return {"request_data": closer_request_data, "action": "get_off"}
+        return {'request_data': closer_request_data, 'action': 'get_off'}
 
     """
     Metodo per l'ordinamento di un chunk di richieste assegnate ad una navetta specifica.
@@ -128,30 +129,84 @@ class Maps(object):
             actions.append(data)
 
             # action contiene la richiesta con l'info su salita o discesa
-            if data["action"] == "get_on":
-                closer_index = requests.index(data["request_data"])
+            if data['action'] == 'get_on':
+                closer_index = requests.index(data['request_data'])
                 request_to_move = requests[index]
-                requests[index] = data["request_data"]
+                requests[index] = data['request_data']
                 requests[closer_index] = request_to_move
 
-                requests_loaded.append(data["request_data"])
-                start = "{0},{1}".format(data["request_data"]["request"].lat_dep,
-                                         data["request_data"]["request"].lon_dep)
-                requests_copy.remove(data["request_data"])
+                requests_loaded.append(data['request_data'])
+                start = "{0},{1}".format(data['request_data']['request'].lat_dep,
+                                         data['request_data']['request'].lon_dep)
+                requests_copy.remove(data['request_data'])
                 index += 1  # si deve passare alla prossima persona da far salire a bordo
 
             else:   # data["action"] == "get_off"
-                requests_loaded.remove(data["request_data"])
-                start = "{0},{1}".format(data["request_data"]["request"].lat_arr,
-                                         data["request_data"]["request"].lon_arr)
+                requests_loaded.remove(data['request_data'])
+                start = "{0},{1}".format(data['request_data']['request'].lat_arr,
+                                         data['request_data']['request'].lon_arr)
 
         # Bisogna far scendere i passeggeri a bordo rimasti
         if len(requests_loaded) >= 1:
             while len(requests_loaded) >= 1:
                 data = self.closer_get_off(start, requests_loaded)
                 actions.append(data)
-                requests_loaded.remove(data["request_data"])
-                start = "{0},{1}".format(data["request_data"]["request"].lat_arr,
-                                         data["request_data"]["request"].lon_arr)
+                requests_loaded.remove(data['request_data'])
+                start = "{0},{1}".format(data['request_data']['request'].lat_arr,
+                                         data['request_data']['request'].lon_arr)
 
         return requests
+
+
+def estimate_departures(actions):
+
+    for bus, bus_requests in actions.iteritems():
+
+        bus_requests_copy = copy.copy(bus_requests)
+        requests = []
+
+        while len(bus_requests_copy) >= 1:
+            first_request = bus_requests_copy[0]   # First request or first request remained
+            requests.append(first_request)
+            bus_requests_copy.remove(first_request)
+            first_request_time_arrival = datetime.strptime(first_request["time_arrival"], "%Y-%m-%d %H:%M:%S")
+            time_threshold = first_request_time_arrival + timedelta(minutes=30)
+            for request in bus_requests_copy:
+
+                time_arrival = datetime.strptime(request["time_arrival"], "%Y-%m-%d %H:%M:%S")
+                if time_arrival > time_threshold:
+                    break
+                else:
+                    requests.append(request)
+
+            for request in requests:
+                if request == first_request:
+                    continue
+                bus_requests_copy.remove(request)
+
+            requests_get_on = [req for req in requests if req["action"] == "get_on"]
+            closer_time_arrival = sorted(requests_get_on, key=lambda x: x["time_arrival"])[0]["time_arrival"]
+            closer_time_arrival = datetime.strptime(closer_time_arrival, "%Y-%m-%d %H:%M:%S")
+
+            duration = 0
+            for request in requests:
+                duration += request["duration"]
+            minutes = duration / 60
+            departure_time = closer_time_arrival - timedelta(minutes=minutes)
+
+            index = bus_requests.index(requests[0])
+            bus_requests[index]["estimated_departure"] = str(departure_time)
+            requests.remove(requests[0])
+            for request in requests:
+                if request["action"] == "get_off":
+                    minutes = request["duration"] / 60
+                    departure_time = departure_time + timedelta(minutes=minutes)
+                else:
+                    minutes = request["duration"] / 60
+                    departure_time = departure_time + timedelta(minutes=minutes)
+                    index = bus_requests.index(request)
+                    bus_requests[index]["estimated_departure"] = str(departure_time)
+
+            requests = []
+
+    return actions
