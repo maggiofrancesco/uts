@@ -47,7 +47,7 @@ def get_bus_id(license_plate):
 
     cursor.execute("SELECT id FROM public.\"Mezzi\" WHERE targa = '{0}'".format(license_plate))
     row = cursor.fetchone()
-    if row != None:
+    if row is not None:
         id_bus = row[0]
     else:
         id_bus = None
@@ -167,7 +167,7 @@ def get_route(lat_origine, lon_origine, lat_destinazione, lon_destinazione):
                                                                                 lat_destinazione, lon_destinazione))
 
     route = cursor.fetchone()
-    if route != None:
+    if route is not None:
         result = {
             "id_route": route[0],
             "departure": route[1],
@@ -186,23 +186,13 @@ def get_route(lat_origine, lon_origine, lat_destinazione, lon_destinazione):
     return result
 
 
-if __name__ == "__main__":
-    buses = get_buses()
-    requests = get_requests(True)
-    #import pdb; pdb.set_trace()
-    for bus in buses:
-        print(str(bus))
-    for request in requests:
-        print(str(request))
+def insert_coordinates(license_plate, travel_date, lat, lon):
 
-    insert_movement("asdasdasd", 10, 41.109024, 16.679656)
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
 
-    print get_movements("3f8ef40f-9a00-40f4-9217-f4a96f0b7b60", 12)
-    insert_route(123.2, 1111.2, 1231.2, 1234.4, 1231, 123, origine="Piazza Marconi", destinazione="Piazza Aldo Moro")
-    print get_route(123.2,1111.2,1231.2,1234.4)
+    cursor.execute("INSERT INTO public.\"Posizioni_Mezzi\"(mezzo, data_viaggio, lat, lon) "
+                   "VALUES ('{0}', '{1}', {2}, {3})".format(license_plate, travel_date, lat, lon))
 
-    from datetime import datetime
-
-    print insert_request(41.117139, 16.698031, 41.108234, 16.691402, datetime.today(), datetime.today(), 'tiziana@tiziana.it')
-
-    print get_bus_id('AS128GU')
+    connection.commit()
+    connection.close()
