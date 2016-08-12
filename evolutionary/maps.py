@@ -11,6 +11,7 @@ from ConfigParser import SafeConfigParser
 config = SafeConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), 'config_evol.cfg'))
 google_directions_api_key = config.get("google_api_key", "directions")
+minutes_range = int(config.get("generation", "minutes_range"))
 
 
 class Maps(object):
@@ -157,7 +158,19 @@ class Maps(object):
 
         return requests
 
-
+"""
+Metodo per effettuare una stima dell'ora di partenza relativa a ciascuna richiesta di viaggio.
+Il metodo si serve delle action calcolate precedentemente, dividendole per chunk di un certo
+numero di minuti (minutes_range). Quindi, ad esempio, data l'ora di arrivo della prima richiesta,
+si considerano tutte le richieste da quell'ora, di mezz'ora in mezz'ora. Per ciascun chunk,
+selezionando solo le action get_on, si individua l'ora di arrivo più imminente e, successivamente,
+utilizzando tutte le action, si calcola la durata totale dell'esecuzione di tutte le azioni
+(get on e get off). L'ora di partenza della prima richiesta viene individuata sottraendo all'ora
+di arrivo più imminente la durata totale per l'esecuzione di tutte le azioni. A partire dall'ora
+di partenza della prima richiesta, si somma di volta in volta la durata di ciascuna azione. Se
+l'azione in questione è una get_on, il valore appena calcolato contenuto in departure_time coincide
+con l'ora di partenza della richiesta.
+"""
 def estimate_departures(actions):
 
     for bus, bus_requests in actions.iteritems():
@@ -170,7 +183,7 @@ def estimate_departures(actions):
             requests.append(first_request)
             bus_requests_copy.remove(first_request)
             first_request_time_arrival = datetime.strptime(first_request["time_arrival"], "%Y-%m-%d %H:%M:%S")
-            time_threshold = first_request_time_arrival + timedelta(minutes=30)
+            time_threshold = first_request_time_arrival + timedelta(minutes=minutes_range)
             for request in bus_requests_copy:
 
                 time_arrival = datetime.strptime(request["time_arrival"], "%Y-%m-%d %H:%M:%S")
@@ -198,12 +211,9 @@ def estimate_departures(actions):
             bus_requests[index]["estimated_departure"] = str(departure_time)
             requests.remove(requests[0])
             for request in requests:
-                if request["action"] == "get_off":
-                    minutes = request["duration"] / 60
-                    departure_time = departure_time + timedelta(minutes=minutes)
-                else:
-                    minutes = request["duration"] / 60
-                    departure_time = departure_time + timedelta(minutes=minutes)
+                minutes = request["duration"] / 60
+                departure_time = departure_time + timedelta(minutes=minutes)
+                if request["action"] == "get_on":
                     index = bus_requests.index(request)
                     bus_requests[index]["estimated_departure"] = str(departure_time)
 
