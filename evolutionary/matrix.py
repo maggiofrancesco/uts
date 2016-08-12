@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 
+import os
 import uuid
 import numpy as np
 import maps as gmaps
 from database import dao
 from random import randint
 from datetime import timedelta
+from ConfigParser import SafeConfigParser
+
+
+config = SafeConfigParser()
+config.read(os.path.join(os.path.dirname(__file__), 'config_evol.cfg'))
+minutes_range = int(config.get("generation", "minutes_range"))
 
 
 class Matrix(object):
@@ -98,9 +105,9 @@ class Matrix(object):
 
             while len(requests_ordered) >= 1:
 
-                # Considero tutte le richieste vicine temporalmente, nell'arco di un'ora
+                # Considero tutte le richieste vicine temporalmente, nell'arco di un certo intervallo di minuti
                 request_datetime = requests_ordered[0]["request"].time_arr
-                time_threshold = request_datetime + timedelta(minutes=30)
+                time_threshold = request_datetime + timedelta(minutes=minutes_range)
                 requests_chunk = [data for data in requests_ordered if data["request"].time_arr <= time_threshold]
 
                 # Le richieste nell'arco orario vengono gestite per vicinanza
@@ -329,7 +336,7 @@ class Matrix(object):
 if __name__ == "__main__":
 
     buses = dao.get_buses()
-    requests = dao.get_requests()
+    requests = dao.get_requests(previous_day=True)
 
     matrice = Matrix(buses, requests)
     matrice.initializing()
