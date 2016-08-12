@@ -74,20 +74,23 @@ def optimized_route():
         data = request.json
         license_plate = data['license_plate']
 
-        id_bus = dao.get_bus_id(license_plate)
-        if id_bus != None:
-            yesterday = str(date.today() - timedelta(days=1))
-            with open('../{0}/{1}.json'.format(reading_routes_folder, yesterday), 'r') as optimized_routes:
-                data = json.load(optimized_routes)
-                route = data[str(id_bus)]
+        if license_plate != "" and license_plate is not None:
+            id_bus = dao.get_bus_id(license_plate)
+            if id_bus is not None:
+                yesterday = str(date.today() - timedelta(days=1))
+                with open('../{0}/{1}.json'.format(reading_routes_folder, yesterday), 'r') as optimized_routes:
+                    data = json.load(optimized_routes)
+                    route = data[str(id_bus)]
 
-            result = {"result": route}
-            status_code = status.HTTP_200_OK
+                result = {"result": route}
+                status_code = status.HTTP_200_OK
+            else:
+                result = {"result": "License plate inserted not exists"}
+                status_code = status.HTTP_204_NO_CONTENT
         else:
-            result = {"result": "License plate inserted not exists"}
-            status_code = status.HTTP_204_NO_CONTENT
+            result = {"result": "License plate not provided"}
+            status_code = status.HTTP_400_BAD_REQUEST
     else:
-
         result = {"result": "wrong content type"}
         status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
 
@@ -100,12 +103,88 @@ def optimized_route():
 
 @app.route('/estimated_departure', methods=['POST'])
 def estimated_departure():
-    pass
+
+    if request.headers['Content-Type'] == 'application/json':
+
+        data = request.json
+        id_request = data["id_request"]
+        departure_time = None
+
+        if id_request != "" and id_request is not None:
+
+            yesterday = str(date.today() - timedelta(days=1))
+            with open('../{0}/{1}.json'.format(reading_routes_folder, yesterday), 'r') as optimized_routes:
+                data = json.load(optimized_routes)
+                found_request = False
+
+                for bus, travel_requests in data.iteritems():
+                    for travel_req in travel_requests:
+                        if travel_req["id_request"] == id_request:
+                            departure_time = travel_req["estimated_departure"]
+                            found_request = True
+                            break
+                    if found_request:
+                        break
+
+                if not found_request:
+                    result = {"result": "travel request not found"}
+                    status_code = status.HTTP_404_NOT_FOUND
+                else:
+                    result = {"result": {"id_request": id_request, "estimated_departure": departure_time}}
+                    status_code = status.HTTP_200_OK
+        else:
+            result = {"result": "id request not provided"}
+            status_code = status.HTTP_400_BAD_REQUEST
+
+    else:
+        result = {"result": "wrong content type"}
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    return Response(
+        json.dumps(result),
+        status=status_code,
+        mimetype="application/json"
+    )
 
 
 @app.route('/send_coordinates', methods=['POST'])
 def send_coordinates():
-    pass
+
+    if request.headers['Content-Type'] == 'application/json':
+
+        data = request.json
+        license_plate = data["license_plate"]
+        lat = data["lat"]
+        lon = data["lon"]
+        travel_date = data["date"]
+
+        if license_plate != "" and license_plate is not None:
+            if lat is not None and lon is not None:
+                if travel_date != "" and travel_date is not None:
+
+                    dao.insert_coordinates(license_plate, travel_date, lat, lon)
+                    result = {"result": "coordinates inserted"}
+                    status_code = status.HTTP_200_OK
+
+                else:
+                    result = {"result": "date not provided"}
+                    status_code = status.HTTP_400_BAD_REQUEST
+            else:
+                result = {"result": "lat or/and lon not provided"}
+                status_code = status.HTTP_400_BAD_REQUEST
+        else:
+            result = {"result": "license plate not provided"}
+            status_code = status.HTTP_400_BAD_REQUEST
+
+    else:
+        result = {"result": "wrong content type"}
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    return Response(
+        json.dumps(result),
+        status=status_code,
+        mimetype="application/json"
+    )
 
 
 if __name__ == "__main__":
