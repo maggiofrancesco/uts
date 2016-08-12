@@ -17,7 +17,7 @@ class Matrix(object):
         self.n_buses = len(buses)
         self.matrix = np.zeros((self.n_requests, self.n_buses), dtype=np.int16)
         self.status = {i: {"seats": buses[i].seats, "requests": 0} for i in range(self.n_buses)}
-        self.fitness_data = {"id": None, "distance": None, "duration": None}
+        self.fitness_data = {'id': None, 'distance': None, 'duration': None}
         self.actions = {}   # Struttura destinata a contenere le action da compiere da ciascun bus (salita o discesa)
 
     """
@@ -100,7 +100,7 @@ class Matrix(object):
 
                 # Considero tutte le richieste vicine temporalmente, nell'arco di un'ora
                 request_datetime = requests_ordered[0]["request"].time_arr
-                time_threshold = request_datetime + timedelta(hours=1)
+                time_threshold = request_datetime + timedelta(minutes=30)
                 requests_chunk = [data for data in requests_ordered if data["request"].time_arr <= time_threshold]
 
                 # Le richieste nell'arco orario vengono gestite per vicinanza
@@ -176,12 +176,12 @@ class Matrix(object):
     """
     def fitness(self):
         maps = gmaps.Maps()
-        self.fitness_data["id"] = str(uuid.uuid4())
+        self.fitness_data['id'] = str(uuid.uuid4())
         distance = 0
         duration = 0
         for j in range(self.n_buses):
             id_bus = self.buses[j].id_bus
-            dao.insert_movement(self.fitness_data["id"], self.buses[j].id_bus, self.buses[j].lat,
+            dao.insert_movement(self.fitness_data['id'], self.buses[j].id_bus, self.buses[j].lat,
                                 self.buses[j].lon, self.buses[j].place)
 
             bus_position_lat = self.buses[j].lat
@@ -214,8 +214,8 @@ class Matrix(object):
 
                 dao.insert_movement(self.fitness_data["id"], self.buses[j].id_bus, bus_position_lat, bus_position_lon)
 
-        self.fitness_data["distance"] = distance
-        self.fitness_data["duration"] = duration
+        self.fitness_data['distance'] = distance
+        self.fitness_data['duration'] = duration
 
     """
     Metodo per la mutazione di ciascuna matrice della popolazione.
@@ -306,8 +306,15 @@ class Matrix(object):
                 request_data["id_request"] = request.id_request
                 request_data["license_plate"] = bus.license_plate
                 request_data["place"] = movement["place"]
+                request_data["lat_place"] = movement["lat"]
+                request_data["lon_place"] = movement["lon"]
                 request_data["departure"] = request.departure
+                request_data["lat_dep"] = request.lat_dep
+                request_data["lon_dep"] = request.lon_dep
                 request_data["arrival"] = request.arrival
+                request_data["lat_arr"] = request.lat_arr
+                request_data["lon_arr"] = request.lon_arr
+                request_data["time_arrival"] = str(request.time_arr)
                 request_data["distance"] = distance
                 request_data["duration"] = duration
                 bus_requests.append(request_data)
