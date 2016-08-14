@@ -26,8 +26,8 @@ class Generation(object):
         self.buses = dao.get_buses()
         self.requests = dao.get_requests(previous_day)
         self.population_amount = population_amount
-        self.prev_generation = [None for i in range(self.population_amount)]
-        self.next_generation = [None for i in range(self.population_amount)]
+        self.prev_generation = [None for _ in range(self.population_amount)]
+        self.next_generation = [None for _ in range(self.population_amount)]
 
     """
     Metodo per la creazione della prima generazione di matrici.
@@ -100,5 +100,3 @@ def main():
     yesterday = str(date.today() - timedelta(days=1))
     with open('../{0}/{1}.json'.format(writing_routes_folder, yesterday), 'w') as outfile:
         json.dump(result, outfile)
-
-
