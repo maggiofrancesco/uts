@@ -78,12 +78,16 @@ def optimized_route():
             id_bus = dao.get_bus_id(license_plate)
             if id_bus is not None:
                 yesterday = str(date.today() - timedelta(days=1))
-                with open('../{0}/{1}.json'.format(reading_routes_folder, yesterday), 'r') as optimized_routes:
-                    data = json.load(optimized_routes)
-                    route = data[str(id_bus)]
+                try:
+                    with open('../{0}/{1}.json'.format(reading_routes_folder, yesterday), 'r') as optimized_routes:
+                        data = json.load(optimized_routes)
+                        route = data[str(id_bus)]
 
-                result = {"result": route}
-                status_code = status.HTTP_200_OK
+                    result = {"result": route}
+                    status_code = status.HTTP_200_OK
+                except IOError:
+                    result = {"result": "Optimized route not found"}
+                    status_code =status.HTTP_404_NOT_FOUND
             else:
                 result = {"result": "License plate inserted not exists"}
                 status_code = status.HTTP_204_NO_CONTENT
