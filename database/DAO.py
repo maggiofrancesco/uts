@@ -17,6 +17,56 @@ password = config.get("database", "password")
 database = config.get("database", "database")
 
 
+def sign_up(name, surname, email, username, user_password):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    cursor.execute("INSERT INTO public.\"Utenti\"(username, email, nome, cognome, password) VALUES ("
+                   "'{0}','{1}','{2}','{3}','{4}')".format(username, email, name, surname, user_password))
+
+    connection.commit()
+    connection.close()
+
+
+def sign_in(email, user_password):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    username = None
+
+    cursor.execute("SELECT username FROM public.\"Utenti\" WHERE email = '{0}' and password = '{1}'"
+                   "".format(email, user_password))
+    row = cursor.fetchone()
+    if row is not None:
+        username = row[0]
+
+    connection.close()
+    return username
+
+
+def check_user(username, email):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    result = {"username": None, "email": None}
+
+    cursor.execute("SELECT username FROM public.\"Utenti\" WHERE username = '{0}'".format(username))
+    row = cursor.fetchone()
+    if row is not None:
+        result["username"] = row[0]
+
+    cursor.execute("SELECT email FROM public.\"Utenti\" WHERE email = '{0}'".format(email))
+    row = cursor.fetchone()
+    if row is not None:
+        result["email"] = row[0]
+
+    connection.close()
+    return result
+
+
 def get_buses():
 
     connection = DBConnection(host, port, database, user, password).connect()

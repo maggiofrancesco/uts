@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import hashlib
 import check_thread
 from database import dao
 from flask_api import status
@@ -17,10 +18,108 @@ config.read(os.path.join(os.path.dirname(__file__), 'config_server.cfg'))
 reading_routes_folder = config.get("server", "reading_routes_folder")
 app = Flask(__name__)
 
+users_logged = []
+
 
 @app.route('/')
 def hello_world():
-    return 'Hello World!'
+    return 'Urban Transport System'
+
+
+@app.route('/sign_up', methods=['POST'])
+def sign_up():
+
+    if request.headers['Content-Type'] == 'application/json':
+
+        data = request.json
+        name = data["name"]
+        surname = data["surname"]
+        email = data["email"]
+        username = data["username"]
+        password = data["password"]
+
+        check_existence = dao.check_user(username, email)
+
+        if not check_existence["username"] and not check_existence["email"]:
+            hashed_password = hashlib.md5(password).hexdigest()
+            dao.sign_up(name, surname, email, username, hashed_password)
+            result = {"result": "New user registered"}
+            status_code = status.HTTP_200_OK
+        else:
+
+            result = {"result": "Email and/or Username already exists", "data": check_existence}
+            status_code = status.HTTP_406_NOT_ACCEPTABLE
+    else:
+
+        result = {"result": "wrong content type"}
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    return Response(
+        json.dumps(result),
+        status=status_code,
+        mimetype="application/json"
+    )
+
+
+@app.route('/sign_in', methods=['POST'])
+def sign_in():
+
+    if request.headers['Content-Type'] == 'application/json':
+
+        data = request.json
+        email = data["email"]
+        password = data["password"]
+        hashed_password = hashlib.md5(password).hexdigest()
+
+        if email in users_logged:
+            result = {"result": "User already logged"}
+            status_code = status.HTTP_200_OK
+        else:
+
+            username = dao.sign_in(email, hashed_password)
+            if username is not None:
+                users_logged.append(email)
+                result = {"result": username}
+                status_code = status.HTTP_200_OK
+            else:
+                result = {"result": "Email and/or password wrong"}
+                status_code = status.HTTP_401_UNAUTHORIZED
+    else:
+
+        result = {"result": "wrong content type"}
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    return Response(
+        json.dumps(result),
+        status=status_code,
+        mimetype="application/json"
+    )
+
+
+@app.route('/sign_out', methods=['POST'])
+def sign_out():
+
+    if request.headers['Content-Type'] == 'application/json':
+
+        data = request.json
+        email = data["email"]
+        if email in users_logged:
+            users_logged.remove(email)
+            result = {"result": "Sign out did"}
+            status_code = status.HTTP_200_OK
+        else:
+            result = {"result": "User not logged"}
+            status_code = status.HTTP_401_UNAUTHORIZED
+    else:
+
+        result = {"result": "wrong content type"}
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    return Response(
+        json.dumps(result),
+        status=status_code,
+        mimetype="application/json"
+    )
 
 
 @app.route('/travel_request', methods=['POST'])
@@ -39,20 +138,27 @@ def travel_request():
         time_arrival = data['time_arrival']
         user = data['user']
 
-        id_request = dao.insert_request(
-            departure=departure,
-            lat_departure=lat_departure,
-            lon_departure=lon_departure,
-            arrival=arrival,
-            lat_arrival=lat_arrival,
-            lon_arrival=lon_arrival,
-            time_departure=time_departure,
-            time_arrival=time_arrival,
-            request_user=user
-        )
+        if user in users_logged:
 
-        result = {"result": id_request}
-        status_code = status.HTTP_200_OK
+            id_request = dao.insert_request(
+                departure=departure,
+                lat_departure=lat_departure,
+                lon_departure=lon_departure,
+                arrival=arrival,
+                lat_arrival=lat_arrival,
+                lon_arrival=lon_arrival,
+                time_departure=time_departure,
+                time_arrival=time_arrival,
+                request_user=user
+            )
+
+            result = {"result": id_request}
+            status_code = status.HTTP_200_OK
+
+        else:
+
+            result = {"result": "User not logged"}
+            status_code = status.HTTP_401_UNAUTHORIZED
 
     else:
 
@@ -87,7 +193,7 @@ def optimized_route():
                     status_code = status.HTTP_200_OK
                 except IOError:
                     result = {"result": "Optimized route not found"}
-                    status_code =status.HTTP_404_NOT_FOUND
+                    status_code = status.HTTP_404_NOT_FOUND
             else:
                 result = {"result": "License plate inserted not exists"}
                 status_code = status.HTTP_204_NO_CONTENT
