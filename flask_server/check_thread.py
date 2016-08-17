@@ -27,7 +27,7 @@ class CheckThread(Thread):
 
 def controller(day):
     while 1:
-        if date.today() >= day:
+        if date.today() > day:
             log.notice("Algorithm will be executed")
             day += timedelta(days=1)
             generation.main()
