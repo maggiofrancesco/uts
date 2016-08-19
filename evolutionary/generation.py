@@ -18,6 +18,8 @@ log = Logger('Generation Module - Urban Transport System')
 config = SafeConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), 'config_evol.cfg'))
 writing_routes_folder = config.get("generation", "writing_routes_folder")
+population_amount = int(config.get("generation", "population_amount"))
+generations_amount = int(config.get("generation", "generations_amount"))
 
 
 class Generation(object):
@@ -36,8 +38,8 @@ class Generation(object):
         log.notice("Generating first generation...")
 
         for index in range(len(self.prev_generation)):
-            buses = copy.deepcopy(self.buses)
-            requests = copy.deepcopy(self.requests)
+            buses = self.buses
+            requests = copy.copy(self.requests)
             self.prev_generation[index] = mtx.Matrix(buses, requests)
 
         log.notice("Doing operations on {0} matrixes...".format(self.population_amount))
@@ -81,11 +83,11 @@ class Generation(object):
 
 def main():
 
-    generation = Generation(population_amount=5, previous_day=True)
+    generation = Generation(population_amount=population_amount, previous_day=True)
     generation.start_first_generation()
     number_generation = 1
     print generation.best_solution().fitness_data
-    for i in range(7):
+    for i in range(generations_amount - 1):
         log.notice("{0}^ generation will be created.".format(number_generation + 1))
         generation.start_next_generation()
         number_generation += 1
