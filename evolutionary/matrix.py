@@ -74,11 +74,12 @@ class Matrix(object):
     Per ciascuna navetta, le richieste vengono riordinate tenendo conto del vincolo di tempo stabilito dagli utenti.
     Per fare in modo che le richieste vengano riordinate tenenendo conto anche delle distanze, il gruppo di richieste
     associato a ciascuna navetta viene suddiviso in chunk orari. In questo modo, in ciascun chunk sono presenti le
-    richieste da soddisfare nell'arco di un'ora e si ottimizza a seconda delle distanze. A seconda di come vengono
-    ordinate, successivamente si effettuano i relativi scambi in matrice, con un'accurata gestione degli indici.
-    E' importante sottolineare che l'ottimizzazione viene effettuata considerando l'action più vicina da effettuare
-    (salita o discesa di un passeggero). Le action da compiere da ciascuna navetta vengono man mano collezionate
-    all'interno di un apposita struttura (self.actions), utilizzata in seguito per fitness e print_matrix.
+    richieste da soddisfare nell'arco mezz'ora (questo parametro è modificabile) e si ottimizza a seconda delle
+    distanze. A seconda di come vengono ordinate, successivamente si effettuano i relativi scambi in matrice, con
+    un'accurata gestione degli indici. E' importante sottolineare che l'ottimizzazione viene effettuata considerando
+    l'action più vicina da effettuare (salita o discesa di un passeggero). Le action da compiere da ciascuna navetta
+    vengono man mano collezionate all'interno di un apposita struttura (self.actions), utilizzata in seguito per
+    fitness e print_matrix.
     """
     def priority(self):
         maps = gmaps.Maps()
