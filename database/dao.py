@@ -246,3 +246,20 @@ def insert_coordinates(license_plate, travel_date, lat, lon):
 
     connection.commit()
     connection.close()
+
+
+def get_bus_stops():
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    result = []
+
+    cursor.execute("SELECT luogo, lat, lon FROM public.\"Fermate\"")
+    bus_stops = cursor.fetchall()
+    if bus_stops is not None:
+        for row in bus_stops:
+            result.append({"place": row[0], "lat": row[1], "lon": row[2]})
+
+    connection.close()
+    return result

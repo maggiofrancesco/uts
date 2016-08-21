@@ -257,6 +257,25 @@ def estimated_departure():
     )
 
 
+@app.route('/bus_stops', methods=['GET'])
+def bus_stops():
+
+    if request.headers['Content-Type'] == 'application/json':
+        bus_stops = dao.get_bus_stops()
+
+        result = {"result": bus_stops}
+        status_code = status.HTTP_200_OK
+    else:
+        result = {"result": "wrong content type"}
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    return Response(
+        json.dumps(result),
+        status=status_code,
+        mimetype="application/json"
+    )
+
+
 @app.route('/send_coordinates', methods=['POST'])
 def send_coordinates():
 
