@@ -43,30 +43,65 @@ class Matrix(object):
     disponibili sul mezzo. In questo modo, l'utente è certo di trovare posto a sedere all'interno della navetta.
     Sfruttando la struttura dati "status", è possibile distribuire le richieste nei mezzi che hanno posti liberi.
     Funziona molto bene quando il numero delle richieste non è superiore al numero totale di posti liberi per tutti
-    i mezzi disponibili. Perciò, si potrebbe ancora migliorare gestendo tale casistica.
+    i mezzi disponibili. Dato che al giorno successivo, le richieste accumulate è molto probabile che siano superiori
+    al numero dei posti totali disponibili, ci si limita nell'effettuare uno smistamento equilibrato delle richieste
+    sui vari mezzi. Si sfrutta una nuova struttura dati contenente per ciascun mezzo il numero massimo di posti
+    disponibili e il numero di posti in più o in meno. Il numero totale di posti in più viene suddiviso tra i vari
+    mezzi e, il resto della divisione (per semplicità) vien fatto pesare sul primo mezzo. #*
     """
     def compatibility(self):
-        for j in range(self.n_buses):
-            count = 0
-            requests_indexes = []
-            for i in range(self.n_requests):
-                if self.matrix[i][j] == 1:
-                    count += 1
-                    requests_indexes.append(i)
 
-            seats = self.buses[j].seats
-            if seats < count:
-                requests_to_move = count - seats
-                for i in range(requests_to_move):
-                    for key, value in self.status.iteritems():
-                        if value["requests"] < value["seats"]:
-                            random_request = randint(0, len(requests_indexes) - 1)
-                            request = requests_indexes[random_request]
-                            self.matrix[request][j] = 0
-                            self.matrix[request][key] = 1
-                            requests_indexes.remove(request)
-                            self.status[key]["requests"] += 1
-                            self.status[j]["requests"] -= 1
+        req_on_buses_data = []
+
+        for key, value in self.status.iteritems():
+            requests_status = value["requests"] - value["seats"]
+            req_on_buses_data.insert(key, {"requests_moreorless": requests_status, "max_seats": value["seats"]})
+
+
+        total_more = 0  # Numero totale di richieste in più
+        for i in range(len(req_on_buses_data)):
+            if req_on_buses_data[i]["requests_moreorless"] > 0:
+                total_more += req_on_buses_data[i]["requests_moreorless"]
+
+        # Viene calcolato il numero accettabile di richieste in più per ciascun mezzo
+        surplus_each_bus, remainder = divmod(total_more, self.n_buses)
+        req_on_buses_data[0]["max_seats"] += remainder                  # *
+        req_on_buses_data[0]["requests_moreorless"] -= remainder        # *
+
+        # Per ciascun mezzo, se il numero di richieste eccede quelle consentite, esse si dislocano su altri mezzi
+        for j in range(self.n_buses):
+
+            seats = req_on_buses_data[j]["max_seats"]
+            if (seats + surplus_each_bus) < (req_on_buses_data[j]["requests_moreorless"] + seats):
+
+                count = 0
+                requests_indexes = []
+                for i in range(self.n_requests):
+                    if self.matrix[i][j] == 1:
+                        count += 1
+                        requests_indexes.append(i)
+
+                placed = 0
+                to_place = (req_on_buses_data[j]["requests_moreorless"] + seats) - (seats + surplus_each_bus)
+
+                while placed < to_place:
+                    for i in range(len(req_on_buses_data)):
+                        if req_on_buses_data[i]["requests_moreorless"] < surplus_each_bus:
+                            seats = req_on_buses_data[i]["max_seats"]
+                            while ((req_on_buses_data[i]["requests_moreorless"] + seats) <= (seats + surplus_each_bus)):
+                                random_request = randint(0, len(requests_indexes) - 1)
+                                request = requests_indexes[random_request]
+                                self.matrix[request][j] = 0
+                                self.matrix[request][i] = 1
+                                requests_indexes.remove(request)
+                                req_on_buses_data[i]["requests_moreorless"] += 1
+                                req_on_buses_data[j]["requests_moreorless"] -= 1
+                                self.status[i]["requests"] += 1
+                                self.status[j]["requests"] -= 1
+                                placed += 1
+                                if placed == to_place:
+                                    break
+                        if placed == to_place:
                             break
 
     """
