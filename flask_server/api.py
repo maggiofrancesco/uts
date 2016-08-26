@@ -7,6 +7,7 @@ import hashlib
 import check_thread
 from database import dao
 from flask_api import status
+from evolutionary import maps as gmaps
 from ConfigParser import SafeConfigParser
 from logbook import Logger, StreamHandler
 from flask import Flask, request, Response
@@ -16,9 +17,15 @@ from datetime import datetime, date, timedelta
 config = SafeConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), 'config_server.cfg'))
 reading_routes_folder = config.get("server", "reading_routes_folder")
-app = Flask(__name__)
 
+app = Flask(__name__)
 users_logged = []
+
+travelling_hours_per_bus = int(config.get("server", "travelling_hours_per_bus"))
+n_buses = len(dao.get_buses())
+max_hours = (travelling_hours_per_bus * n_buses) * 60 * 60  # in seconds
+travelling_hours_reached = 0
+maps = gmaps.Maps()
 
 
 @app.route('/')
@@ -140,20 +147,31 @@ def travel_request():
 
         if user in users_logged:
 
-            id_request = dao.insert_request(
-                departure=departure,
-                lat_departure=lat_departure,
-                lon_departure=lon_departure,
-                arrival=arrival,
-                lat_arrival=lat_arrival,
-                lon_arrival=lon_arrival,
-                time_departure=time_departure,
-                time_arrival=time_arrival,
-                request_user=user
-            )
+            origin = "{0},{1}".format(lat_departure, lon_departure)
+            destination = "{0},{1}".format(lat_arrival, lon_arrival)
+            gmaps_data = maps.get_directions(origin, destination)
 
-            result = {"result": id_request}
-            status_code = status.HTTP_200_OK
+            if travelling_hours_reached + gmaps_data["duration"] < max_hours:
+
+                id_request = dao.insert_request(
+                    departure=departure,
+                    lat_departure=lat_departure,
+                    lon_departure=lon_departure,
+                    arrival=arrival,
+                    lat_arrival=lat_arrival,
+                    lon_arrival=lon_arrival,
+                    time_departure=time_departure,
+                    time_arrival=time_arrival,
+                    request_user=user
+                )
+
+                result = {"result": id_request}
+                status_code = status.HTTP_200_OK
+
+            else:
+
+                result = {"result": 0}
+                status_code = status.HTTP_200_OK
 
         else:
 
