@@ -42,12 +42,11 @@ class Matrix(object):
     Verifica che le associazioni richiesta-mezzo siano effettivamente possibili, considerando il numero di posti
     disponibili sul mezzo. In questo modo, l'utente è certo di trovare posto a sedere all'interno della navetta.
     Sfruttando la struttura dati "status", è possibile distribuire le richieste nei mezzi che hanno posti liberi.
-    Funziona molto bene quando il numero delle richieste non è superiore al numero totale di posti liberi per tutti
-    i mezzi disponibili. Dato che al giorno successivo, le richieste accumulate è molto probabile che siano superiori
-    al numero dei posti totali disponibili, ci si limita nell'effettuare uno smistamento equilibrato delle richieste
-    sui vari mezzi. Si sfrutta una nuova struttura dati contenente per ciascun mezzo il numero massimo di posti
-    disponibili e il numero di posti in più o in meno. Il numero totale di posti in più viene suddiviso tra i vari
-    mezzi e, il resto della divisione (per semplicità) vien fatto pesare sul primo mezzo. #*
+    Dato che al giorno successivo, le richieste accumulate è molto probabile che siano superiori al numero dei
+    posti totali disponibili, ci si limita nell'effettuare uno smistamento equilibrato delle richieste sui vari
+    mezzi. Si sfrutta una nuova struttura dati contenente per ciascun mezzo il numero massimo di posti disponibili
+    e il numero di posti in più o in meno. Il numero totale di posti in più viene suddiviso tra i vari mezzi e, il
+    resto della divisione (per semplicità) vien fatto pesare sul primo mezzo. #*
     """
     def compatibility(self):
 
