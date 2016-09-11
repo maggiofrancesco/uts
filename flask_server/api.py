@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
 import json
 import hashlib
@@ -323,6 +324,42 @@ def send_coordinates():
             result = {"result": "license plate not provided"}
             status_code = status.HTTP_400_BAD_REQUEST
 
+    else:
+        result = {"result": "wrong content type"}
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+
+    return Response(
+        json.dumps(result),
+        status=status_code,
+        mimetype="application/json"
+    )
+
+
+@app.route('/bus_tracking', methods=['POST'])
+def bus_tracking():
+
+    if request.headers['Content-Type'] == 'application/json':
+        data = request.json
+        travel_date = data["travel_date"]
+        license_plate = data["license_plate"]
+
+        if license_plate != "" and license_plate != None:
+            if travel_date != "" and travel_date != None:
+
+                result = re.match(r'^\d{4}-\d{2}-\d{2}$', travel_date)
+                if result:
+                    coordinates = dao.get_coordiantes(license_plate, travel_date)
+                    result = {"result": coordinates}
+                    status_code = status.HTTP_200_OK
+                else:
+                    result = {"result": "date not valid"}
+                    status_code = status.HTTP_400_BAD_REQUEST
+            else:
+                result = {"result": "travel date not provided"}
+                status_code = status.HTTP_400_BAD_REQUEST
+        else:
+            result = {"result": "license plate not provided"}
+            status_code = status.HTTP_400_BAD_REQUEST
     else:
         result = {"result": "wrong content type"}
         status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE

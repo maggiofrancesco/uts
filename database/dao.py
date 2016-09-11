@@ -248,6 +248,27 @@ def insert_coordinates(license_plate, travel_date, lat, lon):
     connection.close()
 
 
+def get_coordiantes(license_plate, travel_date):
+
+    connection = DBConnection(host, port, database, user, password).connect()
+    cursor = connection.cursor()
+
+    date_from = "{0} 00:00:00".format(travel_date)
+    date_to = "{0} 23:59:59".format(travel_date)
+
+    cursor.execute("SELECT lat, lon FROM public.\"Posizioni_Mezzi\" WHERE mezzo = '{0}' AND "
+                   "(data_viaggio, data_viaggio) OVERLAPS ('{1}', '{2}')".format(license_plate, date_from, date_to))
+
+    data = cursor.fetchall()
+    coordinates = []
+    for row in data:
+        coordinates.append([row[0], row[1]])
+
+    connection.commit()
+    connection.close()
+    return coordinates
+
+
 def get_bus_stops():
 
     connection = DBConnection(host, port, database, user, password).connect()
