@@ -13,6 +13,7 @@ from ConfigParser import SafeConfigParser
 config = SafeConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), 'config_evol.cfg'))
 minutes_range = int(config.get("generation", "minutes_range"))
+mutation_amount = int(config.get("generation", "mutation_amount"))
 
 
 class Matrix(object):
@@ -261,15 +262,18 @@ class Matrix(object):
 
     """
     Metodo per la mutazione di ciascuna matrice della popolazione.
-    Si occupa della mutazione scambiando due colonne per ciascuna matrice. Vengono scelte due colonne random e se i due
-    indici casuali sono uguali oppure le due colonne scelte risultano vuote, si procede con la scelta di due nuove
-    colonne, generando valori casuali fino ad un numero massimo di tentativi pari al 75% del numero dei bus (colonne).
+    Si occupa della mutazione scambiando un certa percentuale di richieste tra due colonne.
+    Vengono scelte due colonne random e se i due indici casuali sono uguali oppure le due colonne scelte risultano
+    vuote, si procede con la scelta di due nuove colonne, generando valori casuali fino ad un numero massimo di
+    tentativi pari al 75% del numero dei bus (colonne).
     """
     def mutation(self):
         iterations = int(self.n_buses * 0.75)
         if iterations == 0:
             return
 
+        # Selezione casuale di due colonne
+        found_valid = False
         for i in range(iterations):
             x_column = randint(0, self.n_buses - 1)
             y_column = randint(0, self.n_buses - 1)
@@ -278,15 +282,41 @@ class Matrix(object):
             else:
                 x_requests = self.num_bus_requests(x_column)
                 y_requests = self.num_bus_requests(y_column)
-                if x_requests == 0 and y_requests == 0:
+                if x_requests == 0 or y_requests == 0:
                     continue
                 else:
+                    found_valid = True
                     break
 
-        for i in range(self.n_requests):
-            temp = self.matrix[i][y_column]
-            self.matrix[i][y_column] = self.matrix[i][x_column]
-            self.matrix[i][x_column] = temp
+        if found_valid:
+            # Individuazione delle richieste associate a due mezzi, scelti casualmente
+            x_requests = []
+            y_requests = []
+            for i in range(len(self.matrix)):
+                if self.matrix[i][x_column] == 1:
+                    x_requests.append(i)
+            for i in range(len(self.matrix)):
+                if self.matrix[i][y_column] == 1:
+                    y_requests.append(i)
+
+            # Numero richieste da scambiare
+            min_length = min([len(x_requests), len(y_requests)])
+            num_req_to_exchange = int((min_length * mutation_amount) / 100) + 1
+
+            # Scambio delle richieste, scelte casualmente
+            for i in range(num_req_to_exchange):
+                x_index = randint(0, len(x_requests) - 1)
+                y_index = randint(0, len(y_requests) - 1)
+                x_request = x_requests[x_index]
+                y_request = y_requests[y_index]
+                self.matrix[x_request][x_column] = 0
+                self.matrix[y_request][y_column] = 0
+                self.matrix[x_request][y_column] = 1
+                self.matrix[y_request][x_column] = 1
+                x_requests.remove(x_request)
+                y_requests.remove(y_request)
+                if len(x_requests) == 0 or len(y_requests) == 0:
+                    break
 
     """
     Conta il numero di richieste assegnate ad un mezzo specifico.
@@ -375,21 +405,21 @@ if __name__ == "__main__":
 
     matrice = Matrix(buses, requests)
     matrice.initializing()
-    print '\nDopo popolamento...\n'
-    matrice.print_row_matrix()
-    print '\nDopo compatibility e prima di priority: \n'
-    matrice.compatibility()
-    matrice.print_row_matrix()
-    print '\nPrint row matrix (inizio)\n'
+    #print '\nDopo popolamento...\n'
+    #matrice.print_row_matrix()
+    #print '\nDopo compatibility e prima di priority: \n'
+    #matrice.compatibility()
+    #matrice.print_row_matrix()
+    #print '\nPrint row matrix (inizio)\n'
     matrice.print_row_matrix()
     print '\nDopo priority e prima di fitness (stampa matrice): \n'
-    matrice.priority()
+    #matrice.priority()
     print '\nPrint row matrix (fine): \n'
     matrice.print_row_matrix()
     print '\nDopo fitness, e prima di mutazione (stampa matrice): \n'
-    matrice.fitness()
-    print matrice.fitness_data
-    print matrice.print_matrix()
+    #matrice.fitness()
+    #print matrice.fitness_data
+    #print matrice.print_matrix()
     print '\nDopo mutation: \n'
     matrice.mutation()
     matrice.print_row_matrix()
