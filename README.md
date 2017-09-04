@@ -28,7 +28,7 @@ After, install all necessary to run:
 Than, run the application:
 
     $ cd flask_server
-	  $ python api.py
+    $ python api.py
 
 To see your application, access this url in your browser: 
 
